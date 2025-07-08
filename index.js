@@ -11,19 +11,18 @@ const { Op } = require("sequelize");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
-const JWT_EXPIRES_IN = 3600; // seconds
+const JWT_EXPIRES_IN = 3600;
 
-// Connect to InfinityFree MySQL
 connectDB();
 
 app.use(cors());
-app.use(bodyParser.json({ limit: "10mb" })); // เพิ่ม limit สำหรับ free hosting
+app.use(bodyParser.json({ limit: "10mb" }));
 
-// Helper: Authenticate JWT
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Missing token" });
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ message: "Invalid token" });
     req.user = user;
@@ -31,7 +30,6 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Initialize default admin user with retry logic
 async function initializeAdmin() {
   let retries = 3;
   while (retries > 0) {
@@ -57,13 +55,12 @@ async function initializeAdmin() {
       if (retries === 0) {
         console.error("❌ Failed to create admin user after all retries");
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // รอ 2 วินาที
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }
 }
 
-// Initialize default content with retry logic
 async function initializeContent() {
   let retries = 3;
   while (retries > 0) {
@@ -94,18 +91,15 @@ async function initializeContent() {
       if (retries === 0) {
         console.error("❌ Failed to create default content after all retries");
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // รอ 2 วินาที
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }
 }
 
-// AUTHENTICATION
 app.post("/auth/login", async (req, res) => {
   try {
     const { username, password } = req.body;
-
-    // Validation
     if (!username || !password) {
       return res
         .status(400)
@@ -127,16 +121,13 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// ADMIN CONTENT CRUD (protected)
 app.get("/admin/contents", authenticateToken, async (req, res) => {
   try {
     let { page = 1, limit = 10, status } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
-
-    // Validation
     if (page < 1) page = 1;
-    if (limit < 1 || limit > 100) limit = 10; // จำกัด limit สำหรับ free hosting
+    if (limit < 1 || limit > 100) limit = 10;
 
     let whereClause = {};
     if (status && ["Draft", "Published", "Archived"].includes(status)) {
@@ -145,15 +136,12 @@ app.get("/admin/contents", authenticateToken, async (req, res) => {
 
     const { count, rows } = await Content.findAndCountAll({
       where: whereClause,
-      limit: limit,
+      limit,
       offset: (page - 1) * limit,
       order: [["createdAt", "DESC"]],
     });
 
-    res.json({
-      data: rows,
-      meta: { page, limit, total: count },
-    });
+    res.json({ data: rows, meta: { page, limit, total: count } });
   } catch (error) {
     console.error("Get contents error:", error);
     res.status(500).json({ message: "Server error" });
@@ -164,7 +152,6 @@ app.post("/admin/contents", authenticateToken, async (req, res) => {
   try {
     const { title, textHtml, banner, status } = req.body;
 
-    // Validation
     if (
       !title ||
       !textHtml ||
@@ -172,12 +159,6 @@ app.post("/admin/contents", authenticateToken, async (req, res) => {
       !["Draft", "Published", "Archived"].includes(status)
     ) {
       return res.status(400).json({ message: "Invalid content data" });
-    }
-
-    // ตรวจสอบขนาดข้อมูลสำหรับ free hosting
-    if (textHtml.length > 16777215) {
-      // MEDIUMTEXT limit
-      return res.status(400).json({ message: "Content too large" });
     }
 
     const content = await Content.create({
@@ -211,7 +192,6 @@ app.put("/admin/contents/:id", authenticateToken, async (req, res) => {
   try {
     const { title, textHtml, banner, status } = req.body;
 
-    // Validation
     if (
       !title ||
       !textHtml ||
@@ -219,12 +199,6 @@ app.put("/admin/contents/:id", authenticateToken, async (req, res) => {
       !["Draft", "Published", "Archived"].includes(status)
     ) {
       return res.status(400).json({ message: "Invalid content data" });
-    }
-
-    // ตรวจสอบขนาดข้อมูลสำหรับ free hosting
-    if (textHtml.length > 16777215) {
-      // MEDIUMTEXT limit
-      return res.status(400).json({ message: "Content too large" });
     }
 
     const content = await Content.findByPk(req.params.id);
@@ -258,16 +232,13 @@ app.delete("/admin/contents/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// PUBLIC CONTENT API
 app.get("/contents", async (req, res) => {
   try {
     let { page = 1, limit = 10, search } = req.query;
     page = parseInt(page);
     limit = parseInt(limit);
-
-    // Validation
     if (page < 1) page = 1;
-    if (limit < 1 || limit > 50) limit = 10; // จำกัด limit สำหรับ public API
+    if (limit < 1 || limit > 50) limit = 10;
 
     let whereClause = { status: "Published" };
     if (search && search.trim()) {
@@ -276,7 +247,7 @@ app.get("/contents", async (req, res) => {
 
     const data = await Content.findAll({
       where: whereClause,
-      limit: limit,
+      limit,
       offset: (page - 1) * limit,
       order: [["createdAt", "DESC"]],
     });
@@ -304,21 +275,19 @@ app.get("/contents/:id", async (req, res) => {
   }
 });
 
-// Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     timestamp: new Date().toISOString(),
-    database: "InfinityFree MySQL",
+    database: "Neon PostgreSQL",
   });
 });
 
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Database: InfinityFree MySQL`);
+  console.log(`📊 Database: Neon PostgreSQL`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
 
-  // Initialize data with delay to ensure database is ready
   setTimeout(async () => {
     await initializeAdmin();
     await initializeContent();
